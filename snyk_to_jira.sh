@@ -32,38 +32,48 @@ JIRA_SNYK_CUSTOM_FIELD_PATH_NAME=snyk-path
 ## .jirarc format:
 # export JIRA_USER=<USER>
 # export JIRA_PASSWORD=<PWD>
-if [ -r .jirarc ]
+if [[ -r '.jirarc' ]]
 then
-  source .jirarc
+  source '.jirarc'
 else
   echo ".jirarc file not found"
   exit 1
 fi
 
-[ $JIRA_USER ] || (echo JIRA_USER not specified && exit 1)
-[ $JIRA_PASSWORD ] || (echo JIRA_PASSWORD not specified && exit 1)
-[ $BASE_JIRA_URL ] || (echo BASE_JIRA_URL not specified && exit 1)
-[ $JIRA_PROJECT_NAME ] || (echo BASE_JIRA_URL not specified && exit 1)
+[[ -z "${JIRA_USER}" ]] || (echo JIRA_USER not specified && exit 1)
+[[ -z "${JIRA_PASSWORD}" ]] || (echo JIRA_PASSWORD not specified && exit 1)
+[[ -z "${BASE_JIRA_URL}" ]] || (echo BASE_JIRA_URL not specified && exit 1)
+[[ "${JIRA_PROJECT_NAME}" ]] || (echo BASE_JIRA_URL not specified && exit 1)
 
 function usage()
 {
-  echo "Usage: $0 <snyk_test.json>"
+  echo "Usage: ${0} <snyk_test.json>"
   echo "snyk_test.json should be the output of running 'snyk test --json > snyk_test.json'"
+}
+
+function debug()
+{
+  local -r MSG="${1}"
+  if ((DEBUG == 1)); then
+    echo "${MSG}"
+  fi
 }
 
 function uc_first()
 {
-  local UC_FIRST=`echo -n ${1:0:1} | tr  '[a-z]' '[A-Z]'`${1:1}
-  echo $UC_FIRST
+  local UC_FIRST=$(echo -n "${1:0:1}" | tr '[:lower:]' '[:upper:]')${1:1}
+  echo "${UC_FIRST}"
 }
 
 function urlencode()
 {
     local length="${#1}"
+    local i
+    local c
     for (( i = 0; i < length; i++ )); do
-        local c="${1:i:1}"
-        case $c in
-            [a-zA-Z0-9.~_-]) printf "$c" ;;
+        c="${1:i:1}"
+        case "${c}" in
+            [a-zA-Z0-9.~_-]) printf "%s" "${c}" ;;
             *) printf '%%%02X' "'$c" ;;
         esac
     done
@@ -71,74 +81,74 @@ function urlencode()
 
 function jira_curl()
 {
-  local API=$1
+  local API="${1}"
   local COMMAND=${2:-"GET"}
-  local DATA_FILE=$3
-  if [[ $COMMAND == "POST" ]] ; then
-    curl -s -S -u $JIRA_USER:$JIRA_PASSWORD -X $COMMAND --data @$DATA_FILE -H "Content-Type: application/json" $BASE_JIRA_URL/rest/api/2/$API
+  local DATA_FILE="${3}"
+  if [[ ${COMMAND} == "POST" ]]; then
+    curl -s -S -u "${JIRA_USER}:${JIRA_PASSWORD}" -X "${COMMAND}" --data @"${DATA_FILE}" -H "Content-Type: application/json" "${BASE_JIRA_URL}/rest/api/2/${API}"
   else
-    curl -s -S -u $JIRA_USER:$JIRA_PASSWORD -X $COMMAND -H "Content-Type: application/json" $BASE_JIRA_URL/rest/api/2/$API
+    curl -s -S -u "${JIRA_USER}:${JIRA_PASSWORD}" -X "${COMMAND}" -H "Content-Type: application/json" "${BASE_JIRA_URL}/rest/api/2/${API}"
   fi
 }
 
 function jira_get_project_id()
 {
-  local PROJECT_NAME=$1
-  local PROJECT_ID=`jira_curl issue/createmeta | jq ".projects[] | select(.name==\"$PROJECT_NAME\") | .id" | tr -d '\"'`
+  local PROJECT_NAME="${1}"
+  local PROJECT_ID=$(jira_curl issue/createmeta | jq ".projects[] | select(.name==\"$PROJECT_NAME\") | .id" | tr -d '\"')
   local re='^[0-9]+$'
   if ! [[ $PROJECT_ID =~ $re  ]] ; then
    echo "Error: could not find project with name $PROJECT_NAME" >&2
    exit 1
   fi
-  echo $PROJECT_ID;
+  echo "${PROJECT_ID}"
 }
 
 function jira_get_custom_field_id()
 {
-  local CUSTOM_FIELD_NAME=$1
-  local CUSTOM_FIELD_ID=`jira_curl field | jq ".[] | select(.name==\"$CUSTOM_FIELD_NAME\") | .id" | tr -d '\"'`
+  local CUSTOM_FIELD_NAME="${1}"
+  local CUSTOM_FIELD_ID=$(jira_curl field | jq ".[] | select(.name==\"$CUSTOM_FIELD_NAME\") | .id" | tr -d '\"')
   local re='^customfield_[0-9]+$'
   if ! [[ $CUSTOM_FIELD_ID =~ $re  ]] ; then
    echo "Error: could not find field with name $CUSTOM_FIELD_NAME" >&2
    exit 1
   fi
-  echo $CUSTOM_FIELD_ID;
+  echo "${CUSTOM_FIELD_ID}"
 }
 
 function jira_create_issue()
 {
-  local PROJECT_ID=$1
-  local SUMMARY=$2
-  local SNYK_VULN_ID=$3
-  local SNYK_PATH=$4
-  local SEVERITY=`uc_first $5`
+  local PROJECT_ID="${1}"
+  local SUMMARY="${2}"
+  local SNYK_VULN_ID="${3}"
+  local SNYK_PATH="${4}"
+  local SEVERITY=$(uc_first "${5}")
 
-  local SNYK_VULN_ID_ENC=`urlencode "$SNYK_VULN_ID"`
-  local SNYK_PATH_ENC=`urlencode "$SNYK_PATH"`
+  local SNYK_VULN_ID_ENC=$(urlencode "${SNYK_VULN_ID}")
+  local SNYK_PATH_ENC=$(urlencode "$SNYK_PATH")
 
-  local PAYLOAD_FILE=`mktemp`
+  local PAYLOAD_FILE=$(mktemp)
 
-  local ISSUE_KEY=`jira_curl "search?jql=project=$PROJECT_ID+AND+status!=Done+AND+$JIRA_SNYK_CUSTOM_FIELD_VULN_NAME~$SNYK_VULN_ID_ENC+AND+$JIRA_SNYK_CUSTOM_FIELD_PATH_NAME~\"$SNYK_PATH_ENC\"&maxResults=1&fields=id,key" | jq '.issues[0].key' | tr -d '"'`
+  local ISSUE_KEY=$(jira_curl "search?jql=project=$PROJECT_ID+AND+status!=Done+AND+$JIRA_SNYK_CUSTOM_FIELD_VULN_NAME~$SNYK_VULN_ID_ENC+AND+$JIRA_SNYK_CUSTOM_FIELD_PATH_NAME~\"$SNYK_PATH_ENC\"&maxResults=1&fields=id,key" | jq '.issues[0].key' | tr -d '"')
 
   local re='^[A-Za-z]{3}-[0-9]+$'
   if [[ $ISSUE_KEY =~ $re ]] ; then
     ## Issue with same vuln and path exists
     if [[ $ADD_COMMENT == 1 ]] ; then
-      [ $DEBUG ] && echo "Found exising issue with snyk-vuln-id=$SNYK_VULN_ID (id=$ISSUE_KEY) [$SNYK_PATH] --> Adding comment"
-      cat > $PAYLOAD_FILE <<EOM
+      debug "Found exising issue with snyk-vuln-id=$SNYK_VULN_ID (id=$ISSUE_KEY) [$SNYK_PATH] --> Adding comment"
+      cat > "${PAYLOAD_FILE}" <<EOM
 {
     "body": "Vulnerability not resolved yet"
 }
 EOM
-      jira_curl issue/$ISSUE_KEY/comment POST $PAYLOAD_FILE | grep -v "self"
+      jira_curl "issue/${ISSUE_KEY}/comment" POST "${PAYLOAD_FILE}" | grep -v "self"
     else
-      [ $DEBUG ] && echo "Found exising issue with snyk-vuln-id=$SNYK_VULN_ID (id=$ISSUE_KEY) [$SNYK_PATH] --> Skipping"
+      debug "Found exising issue with snyk-vuln-id=${SNYK_VULN_ID} (id=${ISSUE_KEY}) [${SNYK_PATH}] --> Skipping"
     fi
   else
     ## New issue
-    [ $DEBUG ] && echo "Creating new issue for snyk-vuln-id=$SNYK_VULN_ID: $SUMMARY"
+    debug "Creating new issue for snyk-vuln-id=${SNYK_VULN_ID}: $SUMMARY"
 
-      cat > $PAYLOAD_FILE <<EOM
+    cat > "${PAYLOAD_FILE}" <<EOM
 {
   "fields": {
     "project": {
@@ -157,7 +167,7 @@ EOM
   }
 }
 EOM
-    jira_curl issue POST $PAYLOAD_FILE
+    jira_curl issue POST "${PAYLOAD_FILE}"
     echo
   fi
 
@@ -166,53 +176,55 @@ EOM
 ####################
 # START OF PROGRAM
 ####################
-if ! [ $# -eq 1 ]; then
+if ((${#} != 1)); then
   usage
   exit 1
 fi
 
-JSON_FILE=$1
-if ! [ -r $JSON_FILE ]; then
-  echo "Could not open $JSON_FILE for reading"
+readonly JSON_FILE="${1}"
+if [[ ! -r "${JSON_FILE}" ]]; then
+  echo "Could not open ${JSON_FILE} for reading"
   exit 1
 fi
 
-N_VULNS=`cat $JSON_FILE | jq '.vulnerabilities | length'`
+readonly N_VULNS=$(jq '.vulnerabilities | length' < "${JSON_FILE}")
 
 re='^[0-9]+$'
-if ! [[ $N_VULNS =~ $re ]]; then
-  echo $JSON_FILE does not [$N_VULNS] seem to be an output of 'snyk test --json'
+if ! [[ "${N_VULNS}" =~ ${re} ]]; then
+  echo "${JSON_FILE} does not [${N_VULNS}] seem to be an output of 'snyk test --json'"
   exit 1
 fi
 
-if [ $N_VULNS -eq 0 ]; then
+if ((N_VULNS == 0)); then
   echo "Good for you! No vulns found."
   exit 0
 fi
 
-[ $DEBUG ] && echo Found $N_VULNS vulns
+debug "Found ${N_VULNS} vulns"
 
-[ $DEBUG ] && echo Connecting with user $JIRA_USER
-[ $DEBUG ] && echo Base JIRA URL: $BASE_JIRA_URL
+debug "Connecting with user ${JIRA_USER}"
+debug "Base JIRA URL: ${BASE_JIRA_URL}"
 
-JIRA_PROJECT_ID=`jira_get_project_id $JIRA_PROJECT_NAME`
-[ $DEBUG ] && echo Found project id $JIRA_PROJECT_ID for $JIRA_PROJECT_NAME
+JIRA_PROJECT_ID=$(jira_get_project_id "${JIRA_PROJECT_NAME}")
+debug "Found project id ${JIRA_PROJECT_ID} for ${JIRA_PROJECT_NAME}"
 
-JIRA_SNYK_CUSTOM_FIELD_VULN_ID=`jira_get_custom_field_id $JIRA_SNYK_CUSTOM_FIELD_VULN_NAME`
-[ $DEBUG ] && echo Found custom field id $JIRA_SNYK_CUSTOM_FIELD_VULN_ID for $JIRA_SNYK_CUSTOM_FIELD_VULN_NAME
+JIRA_SNYK_CUSTOM_FIELD_VULN_ID=$(jira_get_custom_field_id "${JIRA_SNYK_CUSTOM_FIELD_VULN_NAME}")
+debug "Found custom field id ${JIRA_SNYK_CUSTOM_FIELD_VULN_ID} for ${JIRA_SNYK_CUSTOM_FIELD_VULN_NAME}"
 
-JIRA_SNYK_CUSTOM_FIELD_PATH_ID=`jira_get_custom_field_id $JIRA_SNYK_CUSTOM_FIELD_PATH_NAME`
-[ $DEBUG ] && echo Found custom field id $JIRA_SNYK_CUSTOM_FIELD_PATH_ID for $JIRA_SNYK_CUSTOM_FIELD_PATH_NAME
+JIRA_SNYK_CUSTOM_FIELD_PATH_ID=$(jira_get_custom_field_id "${JIRA_SNYK_CUSTOM_FIELD_PATH_NAME}")
+debug "Found custom field id ${JIRA_SNYK_CUSTOM_FIELD_PATH_ID} for ${JIRA_SNYK_CUSTOM_FIELD_PATH_NAME}"
 
 
-for ((i=0;i<$N_VULNS;i++)); do
-    TITLE=`cat $JSON_FILE | jq ".vulnerabilities[$i].title" | tr -d '"'`
-    SEVERITY=`cat $JSON_FILE | jq ".vulnerabilities[$i].severity"| tr -d '"'`
-    SNYK_VULN_ID=`cat $JSON_FILE | jq ".vulnerabilities[$i].alternativeIds[0]"| tr -d '"'`
-    MODULE=`cat $JSON_FILE | jq ".vulnerabilities[$i].moduleName"| tr -d '"'`
-    PACKAGE=`cat $JSON_FILE | jq ".vulnerabilities[$i].from[0] | split(\"@\") | .[0]" | tr -d '"'`
-    SNYK_PATH=`cat $JSON_FILE | jq ".vulnerabilities[$i].from | join(\" -> \")" | tr -d '"'`
+for ((i = 0; i < N_VULNS ; i++)); do
+    TITLE=$(jq ".vulnerabilities[$i].title" < "${JSON_FILE}" | tr -d '"')
+    SEVERITY=$(jq ".vulnerabilities[$i].severity" < "${JSON_FILE}" | tr -d '"')
+    SNYK_VULN_ID=$(jq ".vulnerabilities[$i].alternativeIds[0]" < "${JSON_FILE}" | tr -d '"')
+    MODULE=$(jq ".vulnerabilities[$i].moduleName" < "${JSON_FILE}" | tr -d '"')
+    PACKAGE=$(jq ".vulnerabilities[$i].from[0] | split(\"@\") | .[0]" < "${JSON_FILE}" | tr -d '"')
+    SNYK_PATH=$(jq ".vulnerabilities[$i].from | join(\" -> \")" < "${JSON_FILE}" | tr -d '"')
     SUMMARY="[SNYK] ${TITLE/\"/g}: $SEVERITY severity vulnerability found in '$MODULE' for $PACKAGE ($SNYK_VULN_ID)"
 
-    jira_create_issue $JIRA_PROJECT_ID "$SUMMARY" "$SNYK_VULN_ID" "$SNYK_PATH" "$SEVERITY"
+    jira_create_issue "${JIRA_PROJECT_ID}" "$SUMMARY" "$SNYK_VULN_ID" "$SNYK_PATH" "$SEVERITY"
 done
+
+exit 0
