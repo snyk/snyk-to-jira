@@ -61,7 +61,7 @@ function debug()
 
 function uc_first()
 {
-  local UC_FIRST=$(echo -n "${1:0:1}" | tr  tr '[:lower:]' '[:upper:]')${1:1}
+  local UC_FIRST=$(echo -n "${1:0:1}" | tr '[:lower:]' '[:upper:]')${1:1}
   echo "${UC_FIRST}"
 }
 
