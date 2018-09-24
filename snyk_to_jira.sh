@@ -134,7 +134,7 @@ function jira_create_issue()
   if [[ $ISSUE_KEY =~ $re ]] ; then
     ## Issue with same vuln and path exists
     if [[ $ADD_COMMENT == 1 ]] ; then
-      [ $DEBUG ] && echo "Found exising issue with snyk-vuln-id=$SNYK_VULN_ID (id=$ISSUE_KEY) [$SNYK_PATH] --> Adding comment"
+      debug "Found exising issue with snyk-vuln-id=$SNYK_VULN_ID (id=$ISSUE_KEY) [$SNYK_PATH] --> Adding comment"
       cat > "${PAYLOAD_FILE}" <<EOM
 {
     "body": "Vulnerability not resolved yet"
@@ -142,7 +142,7 @@ function jira_create_issue()
 EOM
       jira_curl "issue/${ISSUE_KEY}/comment" POST "${PAYLOAD_FILE}" | grep -v "self"
     else
-      [ $DEBUG ] && echo "Found exising issue with snyk-vuln-id=$SNYK_VULN_ID (id=$ISSUE_KEY) [$SNYK_PATH] --> Skipping"
+      debug "Found exising issue with snyk-vuln-id=${SNYK_VULN_ID} (id=${ISSUE_KEY}) [${SNYK_PATH}] --> Skipping"
     fi
   else
     ## New issue
@@ -176,7 +176,7 @@ EOM
 ####################
 # START OF PROGRAM
 ####################
-if (( ${#} != 1)); then
+if ((${#} != 1)); then
   usage
   exit 1
 fi
