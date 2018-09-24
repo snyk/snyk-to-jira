@@ -22,7 +22,7 @@ The script uses two JIRA custom fields to record the vulnID and the path, and do
 ### 2. Rename the provided [`.jirarc`](jirarc-template.txt) template to `.jirarc`, populate the variables and place it in your project directory.
 
   ```
-  mv `.jirac-template.txt` .jirarc
+  mv "jirac-template.txt" ".jirarc"
   ```
 
   In the `.jirarc` file, you will need to set three variables:
